@@ -5,6 +5,8 @@
 */
 
 #include <setjmp.h>
+#include "Arduino.h"
+#include <avr/pgmspace.h>
 
 // C Macros
 
@@ -48,8 +50,8 @@ typedef struct sobject {
     struct {
       unsigned int type;
       union {
-        symbol_t name;
-        int integer;
+	symbol_t name;
+	int integer;
       };
     };
   };
@@ -88,6 +90,18 @@ volatile char Escape = 0;
 
 // Forward references
 object *tee;
+void error (PGM_P string);
+void pfstring (PGM_P s);
+void pfl ();
+void pln ();
+void pchar (char c);
+void printobject(object *form);
+char *lookupbuiltin (symbol_t name);
+object *eval (object *form, object *env);
+object *read();
+
+
+
 
 // Set up workspace
 
@@ -143,7 +157,7 @@ void markobject (object *obj) {
   object* arg = car(obj);
   unsigned int type = obj->type;
   mark(obj);
-  
+
   if (type >= PAIR || type == ZERO) { // cons
     markobject(arg);
     obj = cdr(obj);
@@ -161,7 +175,7 @@ void sweep () {
 }
 
 void gc (object *form, object *env) {
-  markobject(tee); 
+  markobject(tee);
   markobject(GlobalEnv);
   markobject(GCStack);
   markobject(form);
@@ -301,7 +315,7 @@ void dropframe (int tc, object **env) {
 }
 
 // Handling closures
-  
+
 object *closure (object *fname, object *function, object *args, object **env) {
   object *params = first(function);
   function = cdr(function);
@@ -531,7 +545,7 @@ object *eval (object *form, object *env) {
   if (Freespace < 20) gc(form, env);
   // Escape
   if (Escape) { Escape = 0; error(PSTR("Escape!"));}
-  
+
   if (form == NULL) return nil;
 
   if (symbolp(form)) {
@@ -544,7 +558,7 @@ object *eval (object *form, object *env) {
     else if (name <= ENDFUNCTIONS) return form;
     error2(form, PSTR("undefined"));
   }
-  
+
   // It's a list
   object *function = car(form);
   object *args = cdr(form);
@@ -557,12 +571,12 @@ object *eval (object *form, object *env) {
       if (env == NULL) return form;
       error(PSTR("closures not supported"));
     }
-    
+
     if ((name > SPECIAL_FORMS) && (name < FUNCTIONS)) {
       return ((fn_ptr_type)lookupfn(name))(args, env);
     }
   }
-        
+
   // Evaluate the parameters - result in head
   object *fname = car(form);
   object *head = cons(eval(car(form), env), NULL);
@@ -578,10 +592,10 @@ object *eval (object *form, object *env) {
     form = cdr(form);
     nargs++;
   }
-    
+
   function = car(head);
   args = cdr(head);
- 
+
   if (symbolp(function)) {
     symbol_t name = function->name;
     if (name >= ENDFUNCTIONS) error2(fname, PSTR("is not valid here"));
@@ -591,14 +605,14 @@ object *eval (object *form, object *env) {
     pop(GCStack);
     return result;
   }
-      
+
   if (listp(function) && issymbol(car(function), LAMBDA)) {
     dropframe(0, &env);
     form = closure(fname, cdr(function), args, &env);
     pop(GCStack);
     return eval(form, env);
-  } 
-  
+  }
+
   error2(fname, PSTR("is an illegal function")); return nil;
 }
 
@@ -664,7 +678,7 @@ void printobject(object *form){
 }
 
 int gchar () {
-  if (LastChar) { 
+  if (LastChar) {
     char temp = LastChar;
     LastChar = 0;
     return temp;
@@ -690,7 +704,7 @@ object *nextitem() {
   if (ch == '(') return (object *)BRA;
   if (ch == '\'') return (object *)QUO;
   if (ch == '.') return (object *)DOT;
-  
+
   // Parse variable
   int index = 0;
   Buffer[2] = '\0'; // In case variable is one letter
@@ -703,7 +717,7 @@ object *nextitem() {
   Buffer[index] = '\0';
   if (ch == ')') LastChar = ')';
   if (ch == '(') LastChar = '(';
-  
+
   int x = builtin(Buffer);
   if (x == NIL) return nil;
   if (x < ENDFUNCTIONS) return symbol(x);
@@ -716,7 +730,7 @@ object *readrest() {
   object *item = nextitem();
 
   if(item == (object *)KET) return NULL;
-  
+
   if(item == (object *)DOT) {
     object *arg1 = read();
     if (readrest() != NULL) error(PSTR("Malformed list"));
@@ -727,8 +741,8 @@ object *readrest() {
     object *arg1 = read();
     return cons(cons(symbol(QUOTE), cons(arg1, NULL)), readrest());
   }
-   
-  if(item == (object *)BRA) item = readrest(); 
+
+  if(item == (object *)BRA) item = readrest();
   return cons(item, readrest());
 }
 
@@ -736,7 +750,7 @@ object *read() {
   object *item = nextitem();
   if (item == (object *)BRA) return readrest();
   if (item == (object *)DOT) return read();
-  if (item == (object *)QUO) return cons(symbol(QUOTE), cons(read(), NULL)); 
+  if (item == (object *)QUO) return cons(symbol(QUOTE), cons(read(), NULL));
   return item;
 }
 
